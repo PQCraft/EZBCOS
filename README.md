@@ -9,6 +9,7 @@ Please use putty as the terminal.<br>
 * Window -> Set the size of the window -> Columns: 80, Rows: 25
 * Window -> Set the size of the window -> Lines of scrollback: 0
 * Window -> Adjust the use of the cursor -> Cursor appearance: Underline
-* Window -> Translation -> Character set translation -> Remote character set: CP437, (uncheck) Override with UTF-8 if locale says so
-* Window -> Fonts -> \[ fonts that support extended ascii \]
-<br>It is recommended that you save these settings as a profile.
+* Window -> Translation -> Character set translation -> Remote character set: CP437, (uncheck) Override with UTF-8 if locale says so<br>
+* Window -> Fonts -> \[ fonts that support extended ascii \]<br>
+
+It is recommended that you save these settings as a profile.
