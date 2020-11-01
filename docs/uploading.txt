@@ -1,0 +1,11 @@
+On Linux:
+cat [program converted to hex file] > /dev/ttyUSB[n]
+or
+echo [program converted to hex text] > /dev/ttyUSB[n]
+
+On Windows:
+type [program converted to hex] > //./COM[n]
+type [program converted to hex file] > \\.\COM[n]
+or
+echo [program converted to hex text] > \\.\COM[n]
+
