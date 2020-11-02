@@ -15,13 +15,14 @@
     size_t maxPathLength;
 };*/
 #define fs LITTLEFS
-#define ver "0.0.1.0"
+#define ver "0.0.1.2"
 #define rev "Alpha"
 byte ufgc = 7;
 byte ubgc = 0;
 FILE progFile;
 FILE userFile[16];
-long progMemSize = 262144;
+//long progMemSize = 262144;
+long progMemSize = 65536;
 unsigned int progMemChunkSize = 16384;
 byte *progMem;
 //byte progMem0[65536];
@@ -35,6 +36,10 @@ uint32_t mathU32Reg = 0;
 int32_t  mathS32Reg = 0;
 uint64_t mathU64Reg = 0;
 int64_t  mathS64Reg = 0;
+float    mathF32Reg = 0;
+double   mathF64Reg = 0;
+byte cClmn = 0;
+byte cLine = 0;
 void setup() {
   Serial.begin(115200);
   cls();
@@ -55,7 +60,7 @@ void setup() {
   delay(2000);
   color(7, 0);
   cls();
-  locate(0, 0);
+  locate(1, 1);
   Serial.println("PQWare EZBCOS v" + String(ver) + " r" + String(rev));
   Serial.println("Initializing memory...");
   progMem = (byte *) malloc(progMemSize);
@@ -110,7 +115,7 @@ void setup() {
   } else {
     File autorun = fs.open(autoExecFileName, "r");
     Serial.println("Running " + autoExecFileName + "...");
-    runProg(autoExecFileName, "");
+    runProg(autoExecFileName, "", "/");
     EZSh();
   }
 }
@@ -119,7 +124,7 @@ void loop() {
   hang();
   for (byte yp = 0; yp < 16; yp++) {
     for (byte xp = 0; xp < 16; xp++) {
-      locate(xp, yp);
+      locate(xp + 1, yp + 1);
       //Serial.print("\u001b[1;1H");
       color(random(0, 256), random(0, 256));
       //Serial.print(char(yp * 16 + xp));
@@ -130,20 +135,168 @@ void loop() {
 } 
 
 int EZSh() {
-  String EZShVer = "0.1";
-  String EZShRev = "Alpha";
+  const String EZShVer = "0.2";
+  const String EZShRev = "Beta";
   String cwd = "/";
+  String cmd = "";
+  String arg = "";
   bool ezshExit = false;
-  char pStr[2000];
+  char cmdLine[2048];
+  unsigned int cmdLinePos = 0;
+  int inChar = 0;
+  bool EOL = false;
   Serial.println("EZSh v" + EZShVer + " r" + EZShRev);
   byte tmpufgc = ufgc;
-  fgcolor(1); Serial.print("E: "); fgcolor(tmpufgc); Serial.println("EZSh is not implemented yet. :(");
-  while (!ezshExit) { 
-    ezshExit = true;
+  while (!ezshExit) {
+    shBegin:
+    cmd = "";
+    arg = "";
+    for (int i = 0; i < 2048; i++) {
+      cmdLine[i] = 0;
+    }
+    cmdLinePos = 0;
+    Serial.print(cwd); Serial.print('>');
+    while (inChar != 13) {
+      inChar = Serial.read();
+      if (inChar != -1) {
+        switch (inChar) {
+          case '\x08':
+            if (cmdLinePos > 0) {
+              cmdLinePos -= 1;
+              cmdLine[cmdLinePos] = 0;
+              getCursorLocation();
+              if (cClmn == 1) {
+                locate(80, cLine - 1);
+                Serial.println(' ');
+                locate(80, cLine - 1);
+              } else {
+                Serial.print("\x08"" ""\x08");
+              }
+            }
+            break;
+          case '\x03':
+            Serial.println();
+            goto shBegin;
+            break;
+          default:
+            if (inChar > 31 && inChar < 127) {
+              cmdLine[cmdLinePos] = char(inChar);
+              cmdLinePos += 1;
+              //locate(cClmn, cLine);
+              getCursorLocation();
+              if (cClmn == 80) {
+                Serial.println(char(inChar));
+              } else {
+                Serial.print(char(inChar));
+              }
+              //getCursorLocation();
+            }
+            break;
+        }
+      }
+    }
+    int tmpScanPos = 0;
+    char tmpInChar = cmdLine[tmpScanPos];
+    //Serial.println(String(tmpInChar, DEC));
+    while (true) {
+      if (tmpInChar != ' ') {break;}
+      tmpScanPos += 1;
+      tmpInChar = cmdLine[tmpScanPos];
+      //Serial.println();
+      //Serial.print("1");
+    }
+    while (true) {
+      if (tmpInChar == 0 || tmpInChar == ' ') {break;}
+      cmd += tmpInChar;
+      tmpScanPos += 1;
+      tmpInChar = cmdLine[tmpScanPos];
+      //Serial.println();
+      //Serial.print("2");
+    }
+    tmpScanPos += 1;
+    tmpInChar = cmdLine[tmpScanPos];
+    while (true) {
+      if (tmpInChar == 0) {break;}
+      arg += tmpInChar;
+      tmpScanPos += 1;
+      tmpInChar = cmdLine[tmpScanPos];
+      //Serial.println();
+      //Serial.print("3");
+    }
+    Serial.println();
+    cmd.trim();
+    arg.trim();
+    if (cmd != "") {
+      if (cmd.charAt(0) == '&') {
+        cmd = cmd.substring(1);
+        cmd.toLowerCase();
+        int err = -1;
+        String errText = cmd + " is not a command";
+        if (cmd == "exit") {
+          err = 0;
+          return 0;
+        }
+        if (cmd == "reset") {
+          err = 0;
+          ESP.restart();
+        }
+        if (cmd == "cls") {
+          err = 0;
+          cls();
+        }
+        if (cmd == "echo") {
+          err = 0;
+          if (arg.substring(0, 2) == "-n") {
+            if (arg.substring(0, 3) == "-n ") {
+              Serial.print(arg.substring(3));
+            } else if (arg.substring(0, 3) == "-n" + '\x00') {
+              Serial.print("");
+            } else {
+              Serial.println(arg);
+            }
+          } else {
+            Serial.println(arg);
+          }
+        }
+        if (err != 0) {
+          printErr(errText + " (" + String(err, DEC) + ")");
+        }
+      } else {
+        String tmpCwd = cwd;
+        if (cmd.charAt(0) != '/') {
+          cmd = cwd + cmd;
+        }
+        String tmpCmd = cmd;
+        cwd = cmd.substring(0, cmd.lastIndexOf('/') + 1);
+        cmd = cmd.substring(cmd.lastIndexOf('/') + 1);
+        if (fs.exists(tmpCmd)) {
+          File tmpPreChk = LITTLEFS.open(tmpCmd);
+          if (tmpPreChk.isDirectory()) {
+            printErr(tmpCmd + " is a directory.");
+          } else {
+            runProg(tmpCmd, arg, tmpCwd);
+          }
+        } else {
+          if (cmd == "") {
+            printErr("Could not find directory " + cwd);
+          } else {
+            printErr("Could not find " + cmd + " in " + cwd);
+          }
+        }
+        cwd = tmpCwd;
+      }
+    }
+    //Serial.println(cmd);
+    //Serial.println("----------------");
+    //Serial.println(arg);
+    //Serial.println();
+    //Serial.println(String(cClmn, DEC));
+    //Serial.println(String(cLine, DEC));
+    inChar = Serial.read();
   }
 }
 
-int runProg(String progFileName, String progArgs) {
+int runProg(String progFileName, String progArgs, String startDir) {
   return 0;
 }
 
@@ -164,6 +317,14 @@ void beep(unsigned int freq, unsigned int dur) {
   }
 }
 
+bool printErr(String errorText) {
+  byte tfgc = ufgc;
+  fgcolor(1);
+  Serial.print("E: ");
+  fgcolor(tfgc);
+  Serial.println(errorText);
+}
+
 void statBar(String statText, byte statType) {
   Serial.print("\u001b[s");
   switch (statType) {
@@ -180,14 +341,14 @@ void statBar(String statText, byte statType) {
       color(0, 1);
       break;
   }
-  locate(0, 24);
+  locate(1, 25);
   Serial.print("                                                                                ");
-  locate(0, 24);
+  locate(1, 25);
   for (byte charSel = 0; charSel < statText.length(); charSel++) {
     char tempChar = statText.charAt(charSel);
     if (tempChar >= ' ' && tempChar <= 'ÿ' && tempChar != '\x7F') {Serial.print(tempChar);}
   }
-  //locate(79, 23);
+  //locate(80, 24);
   Serial.print("\u001b[u");
 }
 
@@ -218,10 +379,55 @@ void bgcolor(byte bgc) {
 
 void locate(byte x, byte y) {
   Serial.print("\u001b[");
-  Serial.print(y + 1);
+  Serial.print(y);
   Serial.print(";");
-  Serial.print(x + 1);
+  Serial.print(x);
   Serial.print("H");
+}
+
+void getCursorLocation() {
+  Serial.print("\u001b[6n");
+  int tmpChar = 0;
+  unsigned int idleCycles = 0;
+  unsigned int idleCyclesMax = 65535;
+  while (char(tmpChar) != '\x1b') {
+    tmpChar = Serial.read();
+    //Serial.print("1: "); Serial.println(String(tmpChar, DEC));
+    idleCycles += 1;
+    if (idleCycles >= idleCyclesMax) {
+      return;
+    }
+  }
+  idleCycles = 0;
+  while (char(tmpChar) != '[') {
+    tmpChar = Serial.read();
+    //Serial.print("2: "); Serial.println(String(tmpChar, DEC));
+    if (idleCycles >= idleCyclesMax) {
+      return;
+    }
+  }
+  String line = "";
+  String clmn = "";
+  idleCycles = 0;
+  while (char(tmpChar) != ';') {
+    tmpChar = Serial.read();
+    if (char(tmpChar) != ';') {line += char(tmpChar);}
+    if (idleCycles >= idleCyclesMax) {
+      return;
+    }
+    //Serial.print("3: "); Serial.println(String(tmpChar, DEC));
+  }
+  idleCycles = 0;
+  while (char(tmpChar) != 'R') {
+    tmpChar = Serial.read();
+    if (char(tmpChar) != 'R') {clmn += char(tmpChar);}
+    if (idleCycles >= idleCyclesMax) {
+      return;
+    }
+    //Serial.print("4: "); Serial.println(String(tmpChar, DEC));
+  }
+  cClmn = clmn.toInt();
+  cLine = line.toInt();
 }
 
 void drwlogo() {
@@ -260,6 +466,6 @@ void hang() {
     long temp4 = random(0, 65536) / random(0, 65536);
     long temp5 = temp1 + temp2 + temp3 + temp4;
     char tempc = char(temp5);
-    //locate(79, 24); if (tempc >= ' ' && tempc <= 'ÿ' && tempc != '\x7F') {Serial.print(tempc);}
+    //locate(80, 25); if (tempc >= ' ' && tempc <= 'ÿ' && tempc != '\x7F') {Serial.print(tempc);}
   }
 }
