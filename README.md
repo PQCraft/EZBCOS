@@ -5,7 +5,6 @@ Please use putty as the terminal.<br>
 * Session -> Specify the destination you want to connect to -> Connection type: Serial<br>
 * Session -> Specify the destination you want to connect to -> Serial Line: \[ COM or /dev (wherever the device is connected) \]<br>
 * Session -> Specify the destination you want to connect to -> Speed: 115200<br>
-* Terminal -> Keyboard -> The Backspace key: Control-?(127)<br>
 * Window -> Set the size of the window -> Columns: 80, Rows: 25<br>
 * Window -> Set the size of the window -> Lines of scrollback: 0<br>
 * Window -> Adjust the use of the cursor -> Cursor appearance: Underline<br>
