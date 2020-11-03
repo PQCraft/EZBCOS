@@ -1,7 +1,7 @@
 # EZBCOS
 An operating system for the ESP-32 that interprets byte-code.<br>
 Please use putty as the terminal.<br>
-# Please use putty with the following settings:
+<h2> Please use putty with the following settings: </h2>
 * Session -> Specify the destination you want to connect to -> Connection type: Serial<br>
 * Session -> Specify the destination you want to connect to -> Serial Line: \[ COM or /dev (wherever the device is connected) \]<br>
 * Session -> Specify the destination you want to connect to -> Speed: 115200<br>
