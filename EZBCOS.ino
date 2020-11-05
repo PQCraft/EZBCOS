@@ -15,7 +15,7 @@
     size_t maxPathLength;
 };*/
 #define fs LITTLEFS
-#define ver "0.0.1.2"
+#define ver "0.0.1.3"
 #define rev "Alpha"
 byte ufgc = 7;
 byte ubgc = 0;
@@ -40,6 +40,9 @@ float    mathF32Reg = 0;
 double   mathF64Reg = 0;
 byte cClmn = 0;
 byte cLine = 0;
+String cwd = "/";
+String cmd = "";
+String arg = "";
 void setup() {
   Serial.begin(115200);
   cls();
@@ -84,7 +87,7 @@ void setup() {
   Serial.println("Initalizing filesystem...");
   bool fsFormatted = false;
   recheckfs:
-  if (fs.begin()) {
+  if (fs.begin(false)) {
     unsigned long fsTotalBytes = LITTLEFS.totalBytes();
     unsigned long fsUsedBytes = LITTLEFS.usedBytes();
     unsigned long fsFreeBytes = fsTotalBytes - fsUsedBytes;
@@ -96,12 +99,21 @@ void setup() {
   } else {
     Serial.println("Filesystem mount failed.");
     if (!fsFormatted) {
-      Serial.println("Filesystem mount failed. Formatting...");
-      if (fs.format()) {
-        goto recheckfs;
-      } else {
-        Serial.println("Filesystem format failed.");
-        hang();
+      fsFormatted = true;
+      char tmpChr = prompt("Format (this will erase the flash memory)? ", 0).charAt(0);
+      Serial.println();
+      if (tmpChr == 'y' || tmpChr == 'Y') {
+        Serial.println("Formatting filesystem...");
+        if (fs.format()) {
+          Serial.println("Filesystem format succeeded.");
+          goto recheckfs;
+        } else {
+          //Serial.println("Filesystem format failed.");
+          char tmpChr2 = prompt("Filesystem format failed. Continue? ", 0).charAt(0);
+          if (!(tmpChr == 'y' || tmpChr == 'Y')) {
+            hang();
+          }
+        }
       }
     }
   }
@@ -135,91 +147,44 @@ void loop() {
 } 
 
 int EZSh() {
-  const String EZShVer = "0.2";
+  const String EZShVer = "0.3";
   const String EZShRev = "Beta";
-  String cwd = "/";
-  String cmd = "";
-  String arg = "";
   bool ezshExit = false;
-  char cmdLine[2048];
-  unsigned int cmdLinePos = 0;
-  int inChar = 0;
   bool EOL = false;
   Serial.println("EZSh v" + EZShVer + " r" + EZShRev);
   byte tmpufgc = ufgc;
+  int tmpScanPos = 0;
   while (!ezshExit) {
     shBegin:
+    String tmpInCmd = prompt(cwd + ">", 0);
+    tmpInCmd.trim();
     cmd = "";
     arg = "";
-    for (int i = 0; i < 2048; i++) {
-      cmdLine[i] = 0;
-    }
-    cmdLinePos = 0;
-    Serial.print(cwd); Serial.print('>');
-    while (inChar != 13) {
-      inChar = Serial.read();
-      if (inChar != -1) {
-        switch (inChar) {
-          case '\x08':
-            if (cmdLinePos > 0) {
-              cmdLinePos -= 1;
-              cmdLine[cmdLinePos] = 0;
-              getCursorLocation();
-              if (cClmn == 1) {
-                locate(80, cLine - 1);
-                Serial.println(' ');
-                locate(80, cLine - 1);
-              } else {
-                Serial.print("\x08"" ""\x08");
-              }
-            }
-            break;
-          case '\x03':
-            Serial.println();
-            goto shBegin;
-            break;
-          default:
-            if (inChar > 31 && inChar < 127) {
-              cmdLine[cmdLinePos] = char(inChar);
-              cmdLinePos += 1;
-              //locate(cClmn, cLine);
-              getCursorLocation();
-              if (cClmn == 80) {
-                Serial.println(char(inChar));
-              } else {
-                Serial.print(char(inChar));
-              }
-              //getCursorLocation();
-            }
-            break;
-        }
-      }
-    }
     int tmpScanPos = 0;
-    char tmpInChar = cmdLine[tmpScanPos];
-    //Serial.println(String(tmpInChar, DEC));
-    while (true) {
+    char tmpInChar = tmpInCmd.charAt(tmpScanPos);
+    //Serial.print(String(tmpInChar, HEX) + " ");
+    /*while (true) {
       if (tmpInChar != ' ') {break;}
       tmpScanPos += 1;
       tmpInChar = cmdLine[tmpScanPos];
       //Serial.println();
       //Serial.print("1");
-    }
+    }*/
     while (true) {
       if (tmpInChar == 0 || tmpInChar == ' ') {break;}
       cmd += tmpInChar;
       tmpScanPos += 1;
-      tmpInChar = cmdLine[tmpScanPos];
+      tmpInChar = tmpInCmd.charAt(tmpScanPos);
       //Serial.println();
       //Serial.print("2");
     }
     tmpScanPos += 1;
-    tmpInChar = cmdLine[tmpScanPos];
+    tmpInChar = tmpInCmd.charAt(tmpScanPos);
     while (true) {
       if (tmpInChar == 0) {break;}
       arg += tmpInChar;
       tmpScanPos += 1;
-      tmpInChar = cmdLine[tmpScanPos];
+      tmpInChar = tmpInCmd.charAt(tmpScanPos);
       //Serial.println();
       //Serial.print("3");
     }
@@ -247,7 +212,7 @@ int EZSh() {
         if (cmd == "echo") {
           err = 0;
           if (arg.substring(0, 2) == "-n") {
-            if (arg.substring(0, 3) == "-n ") {
+            if (arg.charAt(2) == ' ') {
               Serial.print(arg.substring(3));
             } else if (arg.substring(0, 3) == "-n" + '\x00') {
               Serial.print("");
@@ -256,6 +221,35 @@ int EZSh() {
             }
           } else {
             Serial.println(arg);
+          }
+        }
+        if (cmd == "htfile") {
+          err = 0;
+          Serial.println("htfile hex encoded file transfer tool");
+          String htfileName = prompt("File name: ", 2);
+          Serial.println();
+          Serial.print("Press ENTER when the file has been sent");
+          Serial.println();
+          while (true) {
+            int tmpChr = Serial.read();
+            if (tmpChr == 13) {
+              break;
+            } else if (tmpChr != -1) {
+              
+            }
+          }
+        }
+        if (cmd == "lfs_format") {
+          err = 0;
+          char tmpChr = prompt("Are you sure (this will erase the flash memory)? ", 0).charAt(0);
+          Serial.println();
+          if (tmpChr == 'y' || tmpChr == 'Y') {
+            Serial.println("Formatting filesystem...");
+            if (fs.format()) {
+              Serial.println("Filesystem format succeeded.");
+            } else {
+              Serial.println("Filesystem format failed.");
+            }
           }
         }
         if (err != 0) {
@@ -292,12 +286,66 @@ int EZSh() {
     //Serial.println();
     //Serial.println(String(cClmn, DEC));
     //Serial.println(String(cLine, DEC));
-    inChar = Serial.read();
+    //inChar = Serial.read();
   }
 }
 
 int runProg(String progFileName, String progArgs, String startDir) {
   return 0;
+}
+
+String prompt(String promptString, byte promptType) {
+  char cmdLine[1024];
+  unsigned int cmdLinePos = 0;
+  int totalChars = 0;
+  bool sawPeriod = false;
+  int inChar = 0;
+  for (int i = 0; i < 1024; i++) {
+    cmdLine[i] = 0;
+  }
+  Serial.print(promptString);
+  while (inChar != 13) {
+    inChar = Serial.read();
+    if (inChar != -1) {
+      switch (inChar) {
+        case '\x08':
+          if (cmdLinePos > 0 && totalChars > 0) {
+            cmdLinePos -= 1;
+            if (cmdLine[cmdLinePos] == 46) {sawPeriod = false;}
+            cmdLine[cmdLinePos] = 0;
+            getCursorLocation();
+            if (cClmn == 1) {
+              locate(80, cLine - 1);
+              Serial.println(' ');
+              locate(80, cLine - 1);
+            } else {
+              Serial.print("\x08"" ""\x08");
+            }
+            totalChars -= 1;
+          }
+          break;
+        case '\x03':
+          return "";
+        default:
+          if (((promptType == 0 && (inChar > 31 && inChar < 127)) || (promptType == 1 && ((inChar > 47 && inChar < 58) || (inChar == 46 && !sawPeriod))) || (promptType == 2 && ((inChar > 44 && inChar < 58) || (inChar > 63 && inChar < 91) || (inChar > 94 && inChar < 123) || inChar == 126 || inChar == 32))) && totalChars < 1023) {
+            cmdLine[cmdLinePos] = char(inChar);
+            cmdLinePos += 1;
+            //locate(cClmn, cLine);
+            getCursorLocation();
+            if (cClmn == 80) {
+              Serial.println(char(inChar));
+            } else {
+              Serial.print(char(inChar));
+            }
+            //getCursorLocation();
+            totalChars += 1;
+            if (inChar == 46) {sawPeriod = true;}
+          }
+          break;
+      }
+    }
+  }
+  return String(cmdLine);
 }
 
 void cls() {
