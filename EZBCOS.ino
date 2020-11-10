@@ -5,18 +5,10 @@
 #include <esp_task_wdt.h>
 #include <esp32-hal-cpu.h>
 #include <stdlib.h>
-//#include <LittleFS.h>
-/*struct FSInfo {
-    size_t totalBytes;
-    size_t usedBytes;
-    size_t blockSize;
-    size_t pageSize;
-    size_t maxOpenFiles;
-    size_t maxPathLength;
-};*/
-#define fs LITTLEFS
+#define lfs LITTLEFS
 #define ver "0.0.1.3"
 #define rev "Alpha"
+
 byte ufgc = 7;
 byte ubgc = 0;
 FILE progFile;
@@ -43,6 +35,7 @@ byte cLine = 0;
 String cwd = "/";
 String cmd = "";
 String arg = "";
+
 void setup() {
   Serial.begin(115200);
   cls();
@@ -87,9 +80,9 @@ void setup() {
   Serial.println("Initalizing filesystem...");
   bool fsFormatted = false;
   recheckfs:
-  if (fs.begin(false)) {
-    unsigned long fsTotalBytes = LITTLEFS.totalBytes();
-    unsigned long fsUsedBytes = LITTLEFS.usedBytes();
+  if (lfs.begin(false)) {
+    unsigned long fsTotalBytes = lfs.totalBytes();
+    unsigned long fsUsedBytes = lfs.usedBytes();
     unsigned long fsFreeBytes = fsTotalBytes - fsUsedBytes;
     String fsVolLabel = "";
     Serial.println("Mounted filesystem.");
@@ -104,7 +97,7 @@ void setup() {
       Serial.println();
       if (tmpChr == 'y' || tmpChr == 'Y') {
         Serial.println("Formatting filesystem...");
-        if (fs.format()) {
+        if (lfs.format()) {
           Serial.println("Filesystem format succeeded.");
           goto recheckfs;
         } else {
@@ -118,16 +111,17 @@ void setup() {
     }
   }
   String autoExecFileName = "";
-  if (fs.exists("/autostart.bcp")) {autoExecFileName = "/autostart.bcp";}
-  if (fs.exists("/autorun.bcp")) {autoExecFileName = "/autorun.bcp";}
-  if (fs.exists("/autoexec.bcp")) {autoExecFileName = "/autoexec.bcp";}
+  if (lfs.exists("/autostart.bcp")) {autoExecFileName = "/autostart.bcp";}
+  if (lfs.exists("/autorun.bcp")) {autoExecFileName = "/autorun.bcp";}
+  if (lfs.exists("/autoexec.bcp")) {autoExecFileName = "/autoexec.bcp";}
   if (autoExecFileName == "") {
     Serial.println("No autorun detected. Running EZSh...");
     EZSh();
   } else {
-    File autorun = fs.open(autoExecFileName, "r");
+    File autorun = lfs.open(autoExecFileName, "r");
     Serial.println("Running " + autoExecFileName + "...");
     runProg(autoExecFileName, "", "/");
+    autorun.close();
     EZSh();
   }
 }
@@ -147,11 +141,13 @@ void loop() {
 } 
 
 int EZSh() {
-  const String EZShVer = "0.3";
+  const String EZShVer = "0.6";
   const String EZShRev = "Beta";
   bool ezshExit = false;
   bool EOL = false;
-  Serial.println("EZSh v" + EZShVer + " r" + EZShRev);
+  Serial.println("EZMicroShell v" + EZShVer + " r" + EZShRev);
+  Serial.println("NOTE: This shell is meant for starting bytecode programs and has very little built in commands.");
+  Serial.println("Internal commands start with '&'.");
   byte tmpufgc = ufgc;
   int tmpScanPos = 0;
   while (!ezshExit) {
@@ -209,6 +205,30 @@ int EZSh() {
           err = 0;
           cls();
         }
+        if (cmd == "ls") {
+          err = 0;
+          //String tmpStr = "";
+          File dir = lfs.open(cwd);
+          File file = dir.openNextFile();
+          while(file){
+            Serial.print(file.name());
+            Serial.print(" - ");
+            Serial.print(file.size());
+            Serial.println(" bytes");
+            file = dir.openNextFile();
+          }
+          file.close();
+          dir.close();
+        }
+        /*if (cmd == "cd") {
+          cwd = arg;
+          //int tmpCharPos2 = arg.
+          rechecknum00:
+          int tmpChrPos = arg.lastIndexOf('/');
+          if (tmpChrPos == arg.length() - 1) {
+            
+          } else if
+        }*/
         if (cmd == "echo") {
           err = 0;
           if (arg.substring(0, 2) == "-n") {
@@ -223,21 +243,85 @@ int EZSh() {
             Serial.println(arg);
           }
         }
+        if (cmd == "mkdir" || cmd == "md") {
+          err = 0;
+          if (arg != "") {
+            String tmpStr = getAbsPath(arg);
+            lfs.mkdir(tmpStr);
+            File tmpFile = lfs.open(tmpStr);
+            if (lfs.exists(tmpStr)) {
+              if (!tmpFile.isDirectory()) {
+                Serial.println("Could not make dir.");
+              }
+            } else {
+              Serial.println("Could not make dir.");
+            }
+            tmpFile.close();
+          } else {
+            Serial.println("Arguments cannot be blank.");
+          }
+        }
+        if (cmd == "chdir" || cmd == "cd") {
+          err = 0;
+          if (arg != "") {
+            //tPause(true);
+            String tmpStr = getAbsPath(arg);
+            //tPause(true);
+            //Serial.println(tmpStr);
+            //tPause(true);
+            if (arg == "..") {
+              if (cwd != "/") {cwd = cwd.substring(0, cwd.lastIndexOf('/', cwd.length() - 2) + 1);}
+            } else if (arg == ".") {} else if (lfs.exists(tmpStr)) {
+              File tmpFile = lfs.open(tmpStr);
+              //tPause(true);
+              //Serial.println(tmpFile.name());
+              cwd = tmpFile.name();
+              //tPause(true);
+              tmpFile.close();
+              //tPause(true);
+            } else {
+              Serial.println("Directory does not exist.");
+            }
+          } else {
+            Serial.println("Arguments cannot be blank.");
+          }
+        }
+        if (cmd == "rmdir" || cmd == "rd") {
+          err = 0;
+          if (arg != "") {
+            String tmpStr = getAbsPath(arg);
+            File tmpFile = lfs.open(tmpStr);
+            if (tmpFile.isDirectory()) {
+              tmpFile.close();
+              lfs.rmdir(tmpStr);
+              if (lfs.exists(tmpStr)) {
+                Serial.println("Could not remove dir.");
+              }
+            } else {
+              tmpFile.close();
+              Serial.println("Not a directory.");
+            }
+          } else {
+            Serial.println("Arguments cannot be blank.");
+          }
+        }
         if (cmd == "htfile") {
           err = 0;
           Serial.println("htfile hex encoded file transfer tool");
-          String htfileName = prompt("File name: ", 2);
+          String htfileName = cwd + prompt("File name: ", 2);
           Serial.println();
           Serial.print("Press ENTER when the file has been sent");
-          Serial.println();
+          File htfile = lfs.open(htfileName, "w");
           while (true) {
             int tmpChr = Serial.read();
-            if (tmpChr == 13) {
+            if (tmpChr == 13 || tmpChr == 3) {
               break;
             } else if (tmpChr != -1) {
-              
+              //if (
             }
           }
+          htfile.close();
+          Serial.println();
         }
         if (cmd == "lfs_format") {
           err = 0;
@@ -245,12 +329,22 @@ int EZSh() {
           Serial.println();
           if (tmpChr == 'y' || tmpChr == 'Y') {
             Serial.println("Formatting filesystem...");
-            if (fs.format()) {
+            if (lfs.format()) {
               Serial.println("Filesystem format succeeded.");
             } else {
               Serial.println("Filesystem format failed.");
             }
           }
+          cwd = "/";
+        }
+        if (cmd == "lfs_info") {
+          err = 0;
+          unsigned long fsTotalBytes = lfs.totalBytes();
+          unsigned long fsUsedBytes = lfs.usedBytes();
+          unsigned long fsFreeBytes = fsTotalBytes - fsUsedBytes;
+          Serial.println("Total space: " + String(fsTotalBytes / 1024, DEC) + "KB");
+          Serial.println("Used space: " + String(fsUsedBytes / 1024, DEC) + "KB");
+          Serial.println("Free space: " + String(fsFreeBytes / 1024, DEC) + "KB");
         }
         if (err != 0) {
           printErr(errText + " (" + String(err, DEC) + ")");
@@ -263,12 +357,15 @@ int EZSh() {
         String tmpCmd = cmd;
         cwd = cmd.substring(0, cmd.lastIndexOf('/') + 1);
         cmd = cmd.substring(cmd.lastIndexOf('/') + 1);
-        if (fs.exists(tmpCmd)) {
-          File tmpPreChk = LITTLEFS.open(tmpCmd);
+        if (lfs.exists(tmpCmd)) { 
+          File tmpPreChk = lfs.open(tmpCmd);
           if (tmpPreChk.isDirectory()) {
+            tmpPreChk.close();
             printErr(tmpCmd + " is a directory.");
           } else {
-            runProg(tmpCmd, arg, tmpCwd);
+            tmpPreChk.close();
+            Serial.print("Program returned ");
+            Serial.println(String(runProg(tmpCmd, arg, tmpCwd), DEC));
           }
         } else {
           if (cmd == "") {
@@ -291,7 +388,32 @@ int EZSh() {
 }
 
 int runProg(String progFileName, String progArgs, String startDir) {
+  // Placeholder for bytecode interpreter
+  byte inst;
+  switch (inst) {
+    case 0:
+      break;
+    default:
+      break;
+  }
   return 0;
+}
+
+String getAbsPath(String filePath) {
+  if (filePath.charAt(0) != '/') {
+    filePath = cwd + filePath;
+  }
+  File tmpFile = lfs.open(filePath);
+  if (tmpFile.isDirectory() && filePath.charAt(filePath.length() - 1) != '/') {
+    filePath += "/";
+  }
+  tmpFile.close();
+  return filePath;
+}
+
+void tPause(bool eraseChar) {
+  while (Serial.peek() < 1) {}
+  if (eraseChar) {Serial.read();}
 }
 
 String prompt(String promptString, byte promptType) {
@@ -327,7 +449,7 @@ String prompt(String promptString, byte promptType) {
         case '\x03':
           return "";
         default:
-          if (((promptType == 0 && (inChar > 31 && inChar < 127)) || (promptType == 1 && ((inChar > 47 && inChar < 58) || (inChar == 46 && !sawPeriod))) || (promptType == 2 && ((inChar > 44 && inChar < 58) || (inChar > 63 && inChar < 91) || (inChar > 94 && inChar < 123) || inChar == 126 || inChar == 32))) && totalChars < 1023) {
+          if ((promptType == 0 && (inChar > 31 && inChar < 127)) || (promptType == 1 && ((inChar > 47 && inChar < 58) || (inChar == 46 && !sawPeriod))) || (promptType == 2 && (inChar > 31 && inChar < 127) && inChar != 60 && inChar != 62 && inChar != 58 && inChar != 34 && inChar != 47 && inChar != 92 && inChar != 124 && inChar != 63 && inChar != 42) && totalChars < 1023) {
             cmdLine[cmdLinePos] = char(inChar);
             cmdLinePos += 1;
             //locate(cClmn, cLine);
