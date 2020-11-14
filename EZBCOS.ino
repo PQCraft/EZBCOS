@@ -141,13 +141,13 @@ void loop() {
 } 
 
 int EZSh() {
-  const String EZShVer = "0.6";
+  const String EZShVer = "0.8";
   const String EZShRev = "Beta";
   bool ezshExit = false;
   bool EOL = false;
   Serial.println("EZMicroShell v" + EZShVer + " r" + EZShRev);
   Serial.println("NOTE: This shell is meant for starting bytecode programs and has very little built in commands.");
-  Serial.println("Internal commands start with '&'.");
+  Serial.println("Internal commands start with ':'.");
   byte tmpufgc = ufgc;
   int tmpScanPos = 0;
   while (!ezshExit) {
@@ -188,7 +188,7 @@ int EZSh() {
     cmd.trim();
     arg.trim();
     if (cmd != "") {
-      if (cmd.charAt(0) == '&') {
+      if (cmd.charAt(0) == ':') {
         cmd = cmd.substring(1);
         cmd.toLowerCase();
         int err = -1;
@@ -229,6 +229,10 @@ int EZSh() {
             
           } else if
         }*/
+        if (cmd == "beep") {
+          err = 0;
+          beep(900, 150);
+        }
         if (cmd == "echo") {
           err = 0;
           if (arg.substring(0, 2) == "-n") {
@@ -247,16 +251,41 @@ int EZSh() {
           err = 0;
           if (arg != "") {
             String tmpStr = getAbsPath(arg);
-            lfs.mkdir(tmpStr);
-            File tmpFile = lfs.open(tmpStr);
-            if (lfs.exists(tmpStr)) {
-              if (!tmpFile.isDirectory()) {
+            if (isValidPath(tmpStr)) {
+              lfs.mkdir(tmpStr);
+              File tmpFile = lfs.open(tmpStr);
+              if (lfs.exists(tmpStr)) {
+                if (!tmpFile.isDirectory()) {
+                  Serial.println("Could not make dir.");
+                }
+              } else {
                 Serial.println("Could not make dir.");
               }
+              tmpFile.close();
             } else {
-              Serial.println("Could not make dir.");
+              Serial.println("Invalid file/directory name.");
             }
-            tmpFile.close();
+          } else {
+            Serial.println("Arguments cannot be blank.");
+          }
+        }
+        if (cmd == "make" || cmd == "mk") {
+          err = 0;
+          if (arg != "") {
+            String tmpStr = getAbsPath(arg);
+            if (isValidPath(tmpStr)) {
+              if (lfs.exists(tmpStr)) {
+                Serial.println("File already exists.");
+              } else {
+                File tmpFile = lfs.open(tmpStr, "w");
+                tmpFile.close();
+                if (!lfs.exists(tmpStr)) {
+                  Serial.println("Could not make file.");
+                }
+              }
+            } else {
+              Serial.println("Invalid file/directory name.");
+            }
           } else {
             Serial.println("Arguments cannot be blank.");
           }
@@ -305,23 +334,193 @@ int EZSh() {
             Serial.println("Arguments cannot be blank.");
           }
         }
+        if (cmd == "remove" || cmd == "rm") {
+          err = 0;
+          if (arg != "") {
+            String tmpStr = getAbsPath(arg);
+            File tmpFile = lfs.open(tmpStr);
+            if (!tmpFile.isDirectory()) {
+              tmpFile.close();
+              lfs.remove(tmpStr);
+              if (lfs.exists(tmpStr)) {
+                Serial.println("Could not remove file.");
+              }
+            } else {
+              tmpFile.close();
+              Serial.println("Not a file.");
+            }
+          } else {
+            Serial.println("Arguments cannot be blank.");
+          }
+        }
         if (cmd == "htfile") {
           err = 0;
           Serial.println("htfile hex encoded file transfer tool");
-          String htfileName = cwd + prompt("File name: ", 2);
+          gethtfileName:
+          String htfileName = getAbsPath(prompt("File name: ", 2));
           Serial.println();
-          Serial.print("Press ENTER when the file has been sent");
-          File htfile = lfs.open(htfileName, "w");
-          while (true) {
-            int tmpChr = Serial.read();
-            if (tmpChr == 13 || tmpChr == 3) {
-              break;
-            } else if (tmpChr != -1) {
-              //if (
-            }
+          if (htfileName.charAt(htfileName.length() - 1) == '/') {
+            Serial.println("Path cannot be a directory.");
+            goto gethtfileName;
           }
-          htfile.close();
-          Serial.println();
+          bool htfail = false;
+          if (lfs.exists(htfileName)) {
+            Serial.println("File already exists.");
+            String tmpStr = prompt("Overwrite?: ", 0);
+            if (tmpStr.charAt(0) == 'y' || tmpStr.charAt(0) == 'Y') {
+              htfail = false;
+            } else {
+              htfail = true;
+            }
+            Serial.println();
+          }
+          if (!htfail) {
+            Serial.print("Press ENTER when the file has been sent");
+            File htfile = lfs.open(htfileName, "w");
+            byte hexVal = 0;
+            byte hexNum = 0;
+            while (true) {
+              int tmpChr = Serial.read();
+              if (tmpChr == 3) {
+                htfile.close();
+                lfs.remove(htfileName);
+                break;
+              } else if (tmpChr == 13) {
+                htfile.close();
+                break;
+              } else if (tmpChr != -1) {
+                bool addHexChar = false;
+                switch (char(tmpChr)) {
+                  case '0':
+                    hexVal += 0;
+                    addHexChar = true;
+                    break;
+                  case '1':
+                    hexVal += 1;
+                    addHexChar = true;
+                    break;
+                  case '2':
+                    hexVal += 2;
+                    addHexChar = true;
+                    break;
+                  case '3':
+                    hexVal += 3;
+                    addHexChar = true;
+                    break;
+                  case '4':
+                    hexVal += 4;
+                    addHexChar = true;
+                    break;
+                  case '5':
+                    hexVal += 5;
+                    addHexChar = true;
+                    break;
+                  case '6':
+                    hexVal += 6;
+                    addHexChar = true;
+                    break;
+                  case '7':
+                    hexVal += 7;
+                    addHexChar = true;
+                    break;
+                  case '8':
+                    hexVal += 8;
+                    addHexChar = true;
+                    break;
+                  case '9':
+                    hexVal += 9;
+                    addHexChar = true;
+                    break;
+                  case 'a':
+                  case 'A':
+                    hexVal += 10;
+                    addHexChar = true;
+                    break;
+                  case 'b':
+                  case 'B':
+                    hexVal += 11;
+                    addHexChar = true;
+                    break;
+                  case 'c':
+                  case 'C':
+                    hexVal += 12;
+                    addHexChar = true;
+                    break;
+                  case 'd':
+                  case 'D':
+                    hexVal += 13;
+                    addHexChar = true;
+                    break;
+                  case 'e':
+                  case 'E':
+                    hexVal += 14;
+                    addHexChar = true;
+                    break;
+                  case 'f':
+                  case 'F':
+                    hexVal += 15;
+                    addHexChar = true;
+                    break;
+                  default:
+                    break;
+                }
+                if (addHexChar) {
+                  hexNum += 1;
+                  if (hexNum > 1) {
+                    hexNum = 0;
+                    htfile.write(hexVal);
+                    hexVal = 0;
+                  } else {
+                    hexVal = hexVal << 4;
+                  }
+                }
+              }
+            }
+            Serial.println();
+          }
+        }
+        if (cmd == "listfile" || cmd == "lf") {
+          err = 0;
+          String tmpStr = getAbsPath(arg);
+          if (arg != "") {
+            if (isValidPath(tmpStr)) {
+              if (lfs.exists(tmpStr)) {
+                File lfile = lfs.open(tmpStr, "r");
+                if (lfile.isDirectory()) {
+                  Serial.print("Must be file.");
+                } else {
+                  while (lfile.available() && Serial.read() != 3) {
+                    char tmpChar = lfile.read();
+                    if (tmpChar == 13) {
+                      char tmpChar2 = lfile.read();
+                      tmpChar = 0;
+                      if (tmpChar2 != 10) {
+                        Serial.println();
+                        tmpChar = tmpChar2;
+                      }
+                    }
+                    if (tmpChar == 10) {
+                      char tmpChar2 = lfile.read();
+                      tmpChar = 0;
+                      if (tmpChar2 != 13) {
+                        Serial.println();
+                        tmpChar = tmpChar2;
+                      }
+                    }
+                    Serial.write(tmpChar);
+                  }
+                }
+                lfile.close();
+              } else {
+                Serial.print("File does not exist.");
+              }
+              Serial.println();
+            } else {
+              Serial.println("Invalid file/directory name.");
+            }
+          } else {
+            Serial.println("Arguments cannot be blank.");
+          }
         }
         if (cmd == "lfs_format") {
           err = 0;
@@ -411,6 +610,19 @@ String getAbsPath(String filePath) {
   return filePath;
 }
 
+bool isValidPath(String filePath) {
+  int charCount = 0;
+  charCount += filePath.indexOf(60);
+  charCount += filePath.indexOf(62);
+  charCount += filePath.indexOf(58);
+  charCount += filePath.indexOf(34);
+  charCount += filePath.indexOf(92);
+  charCount += filePath.indexOf(124);
+  charCount += filePath.indexOf(63);
+  charCount += filePath.indexOf(42);
+  return (charCount < -7);
+}
+
 void tPause(bool eraseChar) {
   while (Serial.peek() < 1) {}
   if (eraseChar) {Serial.read();}
@@ -449,7 +661,7 @@ String prompt(String promptString, byte promptType) {
         case '\x03':
           return "";
         default:
-          if ((promptType == 0 && (inChar > 31 && inChar < 127)) || (promptType == 1 && ((inChar > 47 && inChar < 58) || (inChar == 46 && !sawPeriod))) || (promptType == 2 && (inChar > 31 && inChar < 127) && inChar != 60 && inChar != 62 && inChar != 58 && inChar != 34 && inChar != 47 && inChar != 92 && inChar != 124 && inChar != 63 && inChar != 42) && totalChars < 1023) {
+          if ((promptType == 0 && (inChar > 31 && inChar < 127)) || (promptType == 1 && ((inChar > 47 && inChar < 58) || (inChar == 46 && !sawPeriod))) || (promptType == 2 && (inChar > 31 && inChar < 127) && inChar != 60 && inChar != 62 && inChar != 58 && inChar != 34 && inChar != 92 && inChar != 124 && inChar != 63 && inChar != 42) && totalChars < 1023) {
             cmdLine[cmdLinePos] = char(inChar);
             cmdLinePos += 1;
             //locate(cClmn, cLine);

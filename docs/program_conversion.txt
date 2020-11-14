@@ -1,5 +1,11 @@
 To convert bin programs to hex:
 https://tomeko.net/online_tools/file_to_hex.php?lang=en
 
+Uncheck "Use 0x and comma as separator (C-like)" and "Insert newlines after each 16B"
+
+
+
 To convert hex dump to bin:
 https://tomeko.net/online_tools/hex_to_file.php?lang=en
+
+Uncheck "remove "0x" groups from input"
