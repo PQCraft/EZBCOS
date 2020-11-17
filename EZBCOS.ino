@@ -6,8 +6,9 @@
 #include <esp32-hal-cpu.h>
 #include <stdlib.h>
 #define lfs LITTLEFS
-#define ver "0.0.1.3"
+#define ver "0.0.1.5"
 #define rev "Alpha"
+#define LOGO false
 
 byte ufgc = 7;
 byte ubgc = 0;
@@ -35,29 +36,37 @@ byte cLine = 0;
 String cwd = "/";
 String cmd = "";
 String arg = "";
+String term = "";
 
 void setup() {
   Serial.begin(115200);
+  Serial.setRxBufferSize(4096);
   cls();
-  color(7, 0);
-  //Serial.print("PQWare EZBCOS v");
-  //Serial.print(ver);
-  //Serial.print(" r");
-  //Serial.println(rev);
-  delay(3000);
-  //FSInfo fs_info;
-  color(15, 4);
-  cls();
-  drwlogo();
-  statBar("PQWare EZBCOS v" + String(ver) + " r" + String(rev), 0);
+  while (term == "") {
+    Serial.print("\u0005");
+    delay(500);
+    while (Serial.peek() == -1) {Serial.print("\u0005"); delay(500);}
+    term = Serial.readString();
+  }
+  if (LOGO) {
+    color(7, 0);
+    delay(3000);
+    color(15, 4);
+    cls();
+    drwlogo();
+    statBar("PQWare EZBCOS v" + String(ver) + " r" + String(rev), 0);
+  }
+  beep(900, 150); 
+  delay(80);
   beep(900, 150);
-  delay(100);
-  beep(900, 150);
-  delay(2000);
+  if (LOGO) {delay(2000);}
   color(7, 0);
   cls();
   locate(1, 1);
   Serial.println("PQWare EZBCOS v" + String(ver) + " r" + String(rev));
+  if (term != "PuTTY") {
+    Serial.println("The terminal you are using (" + term + ") is not PuTTY which is recommended for compatibility.");
+  }
   Serial.println("Initializing memory...");
   progMem = (byte *) malloc(progMemSize);
   Serial.print("Allocating memory in ");
@@ -124,6 +133,10 @@ void setup() {
     autorun.close();
     EZSh();
   }
+  Serial.print("System halted. Press ESC to reset.");
+  while (Serial.read() != 27) {}
+  Serial.println();
+  ESP.restart();
 }
 
 void loop() {
@@ -141,13 +154,13 @@ void loop() {
 } 
 
 int EZSh() {
-  const String EZShVer = "0.8";
+  const String EZShVer = "0.10";
   const String EZShRev = "Beta";
   bool ezshExit = false;
   bool EOL = false;
   Serial.println("EZMicroShell v" + EZShVer + " r" + EZShRev);
   Serial.println("NOTE: This shell is meant for starting bytecode programs and has very little built in commands.");
-  Serial.println("Internal commands start with ':'.");
+  Serial.println("Internal commands start with '&'.");
   byte tmpufgc = ufgc;
   int tmpScanPos = 0;
   while (!ezshExit) {
@@ -188,7 +201,7 @@ int EZSh() {
     cmd.trim();
     arg.trim();
     if (cmd != "") {
-      if (cmd.charAt(0) == ':') {
+      if (cmd.charAt(0) == '&') {
         cmd = cmd.substring(1);
         cmd.toLowerCase();
         int err = -1;
@@ -205,30 +218,24 @@ int EZSh() {
           err = 0;
           cls();
         }
-        if (cmd == "ls") {
+        if (cmd == "list" || cmd == "ls") {
           err = 0;
-          //String tmpStr = "";
+          String tmpStr = "";
           File dir = lfs.open(cwd);
           File file = dir.openNextFile();
           while(file){
-            Serial.print(file.name());
-            Serial.print(" - ");
-            Serial.print(file.size());
-            Serial.println(" bytes");
+            String tmpStr = file.name();
+            Serial.print("[" + tmpStr.substring(cwd.length()) + "] ");
+            //Serial.print(" - ");
+            if (!file.isDirectory()) {
+              Serial.print("(" + String(file.size(), DEC));
+              Serial.println(" bytes)");
+            } else {Serial.println("(Dir)");}
             file = dir.openNextFile();
           }
           file.close();
           dir.close();
         }
-        /*if (cmd == "cd") {
-          cwd = arg;
-          //int tmpCharPos2 = arg.
-          rechecknum00:
-          int tmpChrPos = arg.lastIndexOf('/');
-          if (tmpChrPos == arg.length() - 1) {
-            
-          } else if
-        }*/
         if (cmd == "beep") {
           err = 0;
           beep(900, 150);
@@ -334,6 +341,10 @@ int EZSh() {
             Serial.println("Arguments cannot be blank.");
           }
         }
+        if (cmd == "rmdir-r" || cmd == "rd-r") {
+          err = 0;
+          rdr(arg);
+        }
         if (cmd == "remove" || cmd == "rm") {
           err = 0;
           if (arg != "") {
@@ -352,6 +363,39 @@ int EZSh() {
           } else {
             Serial.println("Arguments cannot be blank.");
           }
+        }
+        if (cmd == "rename" || cmd == "rn") {
+          err = 0;
+          if (arg != "") {
+            String fileName1 = getAbsPath(arg);
+            if (lfs.exists(fileName1)) {
+              if (isValidPath(fileName1)) {
+                String fileName2 = getAbsPath(prompt("New file name: ", 2));
+                Serial.println();
+                if (!lfs.exists(fileName2)) {
+                  if (!lfs.rename(fileName1, fileName2)) {
+                    Serial.println("Failed to rename file/directory.");
+                  }
+                } else {
+                  Serial.println("File/directory already exists.");
+                }
+              } else {
+                Serial.println("Invalid file/directory name.");
+              }
+            } else {
+              Serial.println("File/directory does not exist.");
+            }
+          } else {
+            Serial.println("Arguments cannot be blank.");
+          }
+        }
+        if (cmd == "fgc") {
+          err = 0;
+          fgcolor(arg.toInt());
+        }
+        if (cmd == "bgc") {
+          err = 0;
+          bgcolor(arg.toInt());
         }
         if (cmd == "htfile") {
           err = 0;
@@ -390,78 +434,64 @@ int EZSh() {
                 break;
               } else if (tmpChr != -1) {
                 bool addHexChar = false;
+                addHexChar = true;
                 switch (char(tmpChr)) {
                   case '0':
                     hexVal += 0;
-                    addHexChar = true;
                     break;
                   case '1':
                     hexVal += 1;
-                    addHexChar = true;
                     break;
                   case '2':
                     hexVal += 2;
-                    addHexChar = true;
                     break;
                   case '3':
                     hexVal += 3;
-                    addHexChar = true;
                     break;
                   case '4':
                     hexVal += 4;
-                    addHexChar = true;
                     break;
                   case '5':
                     hexVal += 5;
-                    addHexChar = true;
                     break;
                   case '6':
                     hexVal += 6;
-                    addHexChar = true;
                     break;
                   case '7':
                     hexVal += 7;
-                    addHexChar = true;
                     break;
                   case '8':
                     hexVal += 8;
-                    addHexChar = true;
                     break;
                   case '9':
                     hexVal += 9;
-                    addHexChar = true;
                     break;
                   case 'a':
                   case 'A':
                     hexVal += 10;
-                    addHexChar = true;
                     break;
                   case 'b':
                   case 'B':
                     hexVal += 11;
-                    addHexChar = true;
                     break;
                   case 'c':
                   case 'C':
                     hexVal += 12;
-                    addHexChar = true;
                     break;
                   case 'd':
                   case 'D':
                     hexVal += 13;
-                    addHexChar = true;
                     break;
                   case 'e':
                   case 'E':
                     hexVal += 14;
-                    addHexChar = true;
                     break;
                   case 'f':
                   case 'F':
                     hexVal += 15;
-                    addHexChar = true;
                     break;
                   default:
+                    addHexChar = false;
                     break;
                 }
                 if (addHexChar) {
@@ -473,6 +503,7 @@ int EZSh() {
                   } else {
                     hexVal = hexVal << 4;
                   }
+                  addHexChar = false;
                 }
               }
             }
@@ -620,7 +651,40 @@ bool isValidPath(String filePath) {
   charCount += filePath.indexOf(124);
   charCount += filePath.indexOf(63);
   charCount += filePath.indexOf(42);
-  return (charCount < -7);
+  charCount += filePath.indexOf(38);
+  filePath = filePath.substring(filePath.lastIndexOf('/') + 1);
+  if (filePath.length() > 31) {return false;}
+  return (charCount < -8);
+}
+
+void rdr(String inArg) {
+  String tmpStr = "";
+  File dir = lfs.open(getAbsPath(inArg));
+  if (dir.isDirectory()) {
+    File file = dir.openNextFile();
+    while (file) {
+      String tmpStr = file.name();
+      //Serial.print(" - ");
+      if (file.isDirectory()) {
+        file.close();
+        rdr(tmpStr);
+        lfs.rmdir(tmpStr);
+      } else {
+        file.close();
+        lfs.remove(tmpStr);
+        if (lfs.exists(tmpStr)) {
+          Serial.println("Failed to remove " + tmpStr);
+        }
+      }
+      file = dir.openNextFile();
+    }
+    file.close();
+    dir.close();
+    lfs.rmdir(getAbsPath(inArg));
+  } else {
+    Serial.println("Not a directory.");
+    dir.close();
+  }
 }
 
 void tPause(bool eraseChar) {
@@ -661,7 +725,7 @@ String prompt(String promptString, byte promptType) {
         case '\x03':
           return "";
         default:
-          if ((promptType == 0 && (inChar > 31 && inChar < 127)) || (promptType == 1 && ((inChar > 47 && inChar < 58) || (inChar == 46 && !sawPeriod))) || (promptType == 2 && (inChar > 31 && inChar < 127) && inChar != 60 && inChar != 62 && inChar != 58 && inChar != 34 && inChar != 92 && inChar != 124 && inChar != 63 && inChar != 42) && totalChars < 1023) {
+          if ((promptType == 0 && (inChar > 31 && inChar < 127)) || (promptType == 1 && ((inChar > 47 && inChar < 58) || (inChar == 46 && !sawPeriod))) || (promptType == 2 && (inChar > 31 && inChar < 127) && inChar != 60 && inChar != 62 && inChar != 58 && inChar != 34 && inChar != 92 && inChar != 124 && inChar != 63 && inChar != 42 && inChar != 38 && totalChars < 32) && totalChars < 1023) {
             cmdLine[cmdLinePos] = char(inChar);
             cmdLinePos += 1;
             //locate(cClmn, cLine);
